@@ -21,7 +21,7 @@ st.markdown("---")
 def cargar_datos():
     try:
         # Intenta leer el archivo Excel
-        df = pd.read_excel('datos/tu_archivo.xlsx')  # Cambia el nombre
+        df = pd.read_excel('BD encabezados.xlsx')  # Cambia el nombre
         
         # Si tu Excel tiene varias hojas, especifica la hoja
         # df = pd.read_excel('datos/tu_archivo.xlsx', sheet_name='Hoja1')
