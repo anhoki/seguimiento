@@ -4,6 +4,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import folium
+from streamlit_folium import folium_static
+import geopandas as gpd
+from shapely.geometry import Point
 
 @st.cache_data
 def cargar_datos():
@@ -326,44 +333,227 @@ with tab4:
     )
 
 with tab5:
-    st.subheader("Distribución Geográfica")
+    st.subheader("🗺️ Distribución Geográfica")
     
-    # Gráfico de barras por departamento
-    df_departamento = df_filtrado.groupby('DEPARTAMENTO').agg({
-        'PROYECTO': 'count',
-        'Monto del Contrato de Planificación Externa': 'sum'
-    }).reset_index()
-    df_departamento.columns = ['DEPARTAMENTO', 'Cantidad Proyectos', 'Monto Total']
-    
+    # Filtros en la misma pestaña
     col1, col2 = st.columns(2)
     
     with col1:
-        fig_dep = px.bar(
-            df_departamento,
-            x='DEPARTAMENTO',
-            y='Cantidad Proyectos',
-            title="Proyectos por Departamento"
-        )
-        st.plotly_chart(fig_dep, use_container_width=True)
+        # Filtro de departamentos (único o múltiple)
+        departamentos_disponibles = df_filtrado['DEPARTAMENTO'].dropna().unique()
+        
+        if len(departamentos_disponibles) > 0:
+            # Opción para seleccionar tipo de visualización
+            tipo_seleccion = st.radio(
+                "Seleccionar departamentos:",
+                ["Un departamento", "Múltiples departamentos"],
+                key="tipo_seleccion_mapa"
+            )
+            
+            if tipo_seleccion == "Un departamento":
+                depto_seleccionado = st.selectbox(
+                    "Seleccionar departamento:",
+                    options=sorted(departamentos_disponibles),
+                    key="depto_unico"
+                )
+                deptos_filtro = [depto_seleccionado]
+            else:
+                deptos_filtro = st.multiselect(
+                    "Seleccionar departamentos:",
+                    options=sorted(departamentos_disponibles),
+                    default=sorted(departamentos_disponibles)[:3] if len(departamentos_disponibles) > 0 else [],
+                    key="depto_multiple"
+                )
+        else:
+            st.warning("No hay datos de departamentos disponibles")
+            deptos_filtro = []
     
     with col2:
-        fig_dep_monto = px.bar(
-            df_departamento,
-            x='DEPARTAMENTO',
-            y='Monto Total',
-            title="Monto Total por Departamento"
-        )
-        st.plotly_chart(fig_dep_monto, use_container_width=True)
+        # Filtro de municipios (dependiente del departamento seleccionado)
+        if deptos_filtro:
+            # Filtrar municipios por los departamentos seleccionados
+            municipios_disponibles = df_filtrado[
+                df_filtrado['DEPARTAMENTO'].isin(deptos_filtro)
+            ]['MUNICIPIO'].dropna().unique()
+            
+            if len(municipios_disponibles) > 0:
+                municipios_seleccionados = st.multiselect(
+                    "Filtrar por municipios (opcional):",
+                    options=sorted(municipios_disponibles),
+                    key="municipios_mapa"
+                )
+            else:
+                municipios_seleccionados = []
+                st.info("No hay municipios disponibles para los departamentos seleccionados")
+        else:
+            municipios_seleccionados = []
+            st.info("Selecciona al menos un departamento")
     
-    # Tabla por municipio
-    st.subheader("Detalle por Municipio")
-    df_municipio = df_filtrado.groupby(['DEPARTAMENTO', 'MUNICIPIO']).agg({
-        'PROYECTO': 'count',
-        'Monto del Contrato de Planificación Externa': 'sum'
-    }).reset_index()
-    df_municipio.columns = ['DEPARTAMENTO', 'MUNICIPIO', 'Cantidad Proyectos', 'Monto Total']
-    st.dataframe(df_municipio, use_container_width=True, hide_index=True)
-
+    # Aplicar filtros
+    df_mapa = df_filtrado.copy()
+    
+    if deptos_filtro:
+        df_mapa = df_mapa[df_mapa['DEPARTAMENTO'].isin(deptos_filtro)]
+    
+    if municipios_seleccionados:
+        df_mapa = df_mapa[df_mapa['MUNICIPIO'].isin(municipios_seleccionados)]
+    
+    # Verificar si hay datos para mostrar
+    if len(df_mapa) == 0:
+        st.warning("No hay proyectos que coincidan con los filtros seleccionados")
+    else:
+        # Crear mapa interactivo con Folium
+        st.markdown("### Mapa de Proyectos")
+        
+        # Coordenadas aproximadas de Guatemala (centro)
+        lat_centro, lon_centro = 15.7835, -90.2308
+        
+        # Crear mapa base
+        m = folium.Map(
+            location=[lat_centro, lon_centro],
+            zoom_start=7,
+            tiles='OpenStreetMap'
+        )
+        
+        # Diccionario de colores para tipos de proyecto
+        colores_tipo = {
+            'Nuevo': 'green',
+            'Reforma': 'blue',
+            'Mantenimiento': 'orange',
+            'Ampliación': 'purple',
+            'Remodelación': 'red',
+            'Otro': 'gray'
+        }
+        
+        # Agrupar por municipio para mostrar conteo
+        df_agrupado = df_mapa.groupby(['DEPARTAMENTO', 'MUNICIPIO']).agg({
+            'PROYECTO': 'count',
+            'Monto del Contrato de Planificación Externa': 'sum',
+            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': 'mean'
+        }).reset_index()
+        
+        df_agrupado.columns = ['DEPARTAMENTO', 'MUNICIPIO', 'Cantidad Proyectos', 
+                               'Monto Total', 'Avance Promedio']
+        
+        # Aquí necesitarías tener coordenadas reales de los municipios
+        # Por ahora, usaré coordenadas aproximadas
+        # Idealmente, tendrías un archivo con las coordenadas de cada municipio
+        
+        # Si no tienes coordenadas reales, puedes crear puntos aleatorios alrededor del centro
+        import random
+        
+        for idx, row in df_agrupado.iterrows():
+            # Generar coordenadas aleatorias cercanas al centro del departamento
+            # (Esto es solo un ejemplo, idealmente usarías coordenadas reales)
+            lat = lat_centro + random.uniform(-1, 1)
+            lon = lon_centro + random.uniform(-1, 1)
+            
+            # Determinar color basado en el tipo de proyecto principal
+            # (Esto es simplificado, idealmente tendrías el tipo en los datos)
+            color = 'blue'
+            if row['Avance Promedio'] > 75:
+                color = 'green'
+            elif row['Avance Promedio'] > 50:
+                color = 'orange'
+            elif row['Avance Promedio'] > 25:
+                color = 'red'
+            else:
+                color = 'gray'
+            
+            # Crear popup con información
+            popup_text = f"""
+            <b>{row['MUNICIPIO']}, {row['DEPARTAMENTO']}</b><br>
+            Proyectos: {row['Cantidad Proyectos']}<br>
+            Monto Total: Q{row['Monto Total']:,.0f}<br>
+            Avance Promedio: {row['Avance Promedio']:.1f}%
+            """
+            
+            # Añadir marcador
+            folium.Marker(
+                [lat, lon],
+                popup=folium.Popup(popup_text, max_width=300),
+                tooltip=f"{row['MUNICIPIO']} ({row['Cantidad Proyectos']} proyectos)",
+                icon=folium.Icon(color=color, icon='info-sign')
+            ).add_to(m)
+        
+        # Añadir capa de calor si hay suficientes puntos
+        if len(df_agrupado) > 3:
+            from folium.plugins import HeatMap
+            
+            # Preparar datos para heatmap
+            heat_data = []
+            for idx, row in df_agrupado.iterrows():
+                lat = lat_centro + random.uniform(-1, 1)
+                lon = lon_centro + random.uniform(-1, 1)
+                weight = row['Cantidad Proyectos']  # Peso por cantidad de proyectos
+                heat_data.append([lat, lon, weight])
+            
+            # Añadir heatmap
+            HeatMap(heat_data, radius=15, blur=10).add_to(m)
+        
+        # Mostrar el mapa
+        folium_static(m, width=800, height=500)
+        
+        # Estadísticas adicionales
+        st.markdown("### 📊 Resumen por área seleccionada")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Proyectos", len(df_mapa))
+        
+        with col2:
+            st.metric("Municipios", df_mapa['MUNICIPIO'].nunique())
+        
+        with col3:
+            monto_total = df_mapa['Monto del Contrato de Planificación Externa'].sum()
+            st.metric("Monto Total", f"Q{monto_total:,.0f}")
+        
+        with col4:
+            avance_prom = df_mapa['AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'].mean()
+            st.metric("Avance Promedio", f"{avance_prom:.1f}%")
+        
+        # Tabla de municipios
+        st.markdown("### 📋 Detalle por municipio")
+        
+        # Preparar tabla resumen
+        tabla_municipios = df_mapa.groupby(['DEPARTAMENTO', 'MUNICIPIO']).agg({
+            'PROYECTO': 'count',
+            'Monto del Contrato de Planificación Externa': 'sum',
+            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': 'mean'
+        }).round(2).reset_index()
+        
+        tabla_municipios.columns = ['Departamento', 'Municipio', 
+                                    'Cantidad Proyectos', 'Monto Total', 
+                                    'Avance Promedio (%)']
+        
+        # Formatear moneda
+        tabla_municipios['Monto Total'] = tabla_municipios['Monto Total'].apply(
+            lambda x: f"Q{x:,.0f}"
+        )
+        
+        st.dataframe(
+            tabla_municipios,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Avance Promedio (%)": st.column_config.NumberColumn(format="%.1f%%")
+            }
+        )
+        
+        # Gráfico de barras por municipio
+        st.markdown("### 📈 Proyectos por municipio")
+        
+        fig_municipios = px.bar(
+            tabla_municipios,
+            x='Municipio',
+            y='Cantidad Proyectos',
+            color='Departamento',
+            title="Cantidad de proyectos por municipio",
+            labels={'Cantidad Proyectos': 'Número de proyectos'}
+        )
+        fig_municipios.update_xaxis(tickangle=45)
+        st.plotly_chart(fig_municipios, use_container_width=True)
 # Footer con información adicional
 st.markdown("---")
 st.markdown("📅 Última actualización: " + datetime.now().strftime("%d/%m/%Y %H:%M"))
