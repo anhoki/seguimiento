@@ -5,32 +5,81 @@ import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
 
-# Configuración de la página
-st.set_page_config(
-    page_title="Dashboard de Proyectos - UCEE",
-    page_icon="📊",
-    layout="wide"
-)
-
-# Título principal
-st.title("📊 Dashboard de Seguimiento de Proyectos - UCEE")
-st.markdown("---")
-
-# Función para cargar datos (ajusta según tu fuente de datos)
 @st.cache_data
 def cargar_datos():
     try:
-        # Intenta leer el archivo Excel
-        df = pd.read_excel('BD encabezados.xlsx')  # Cambia el nombre
+        # Leer tu archivo Excel
+        df = pd.read_excel('BD encabezados.xlsx')  # Ajusta la ruta
         
-        # Si tu Excel tiene varias hojas, especifica la hoja
-        # df = pd.read_excel('datos/tu_archivo.xlsx', sheet_name='Hoja1')
+        # Lista de columnas que deben ser numéricas
+        columnas_numericas = [
+            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)',
+            'AVANCE EN PLANIFICACION',
+            'REVISIÓN DE ESPECIALISTA ESTRUCTURAL',
+            'REVISIÓN DE ESPECIALISTA AMBIENTAL',
+            'REVISIÓN DE ESPECIALISTA EN TIERRAS',
+            'REVISIÓN DE ESPECIALISTA ELECTRICISTA',
+            'REVISIÓN DE ESPECIALISTA GEOLOGO',
+            'AVANCE EN RENGLONEO Y CUANTIFICACION',
+            'AVANCE EN PERFIL DEL PROYECTO',
+            'AVANCE AVAL CONRED',
+            'AVANCE EXPEDIENTE SANITARIO MSPAS',
+            'AVANCE EN DOCUMENTOS SUBIDOS AL SNIP',
+            'Metros cuadrados de la edificacion',
+            'Monto del Contrato de Planificación Externa',
+            'Monto pagado a la fecha'
+        ]
         
+        # Convertir cada columna a numérico, forzando errores a NaN
+        for col in columnas_numericas:
+            if col in df.columns:
+                # Eliminar caracteres especiales como '%', 'Q', etc.
+                df[col] = df[col].astype(str).str.replace('%', '', regex=False)
+                df[col] = df[col].astype(str).str.replace('Q', '', regex=False)
+                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
+                df[col] = df[col].astype(str).str.strip()
+                
+                # Convertir a numérico
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Convertir columnas de fecha
+        columnas_fecha = [
+            'FECHA DE ASIGNACION/CONTRATO',
+            'FECHA ESTIMADA DE ENTREGA DEL PROYECTO',
+            'FECHA DE ENTREGA SEGUN CONTRATO'
+        ]
+        
+        for col in columnas_fecha:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        # Eliminar filas con valores nulos en columnas críticas
+        df = df.dropna(subset=['PROYECTO', 'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'])
+        
+        # Llenar valores nulos con 0 en columnas numéricas
+        for col in columnas_numericas:
+            if col in df.columns:
+                df[col] = df[col].fillna(0)
+        
+        st.sidebar.success(f"✅ Datos cargados: {len(df)} registros")
         return df
-    except FileNotFoundError:
-        st.error("No se encontró el archivo de datos. Por favor, verifica que esté en la carpeta 'datos/'")
+        
+    except Exception as e:
+        st.error(f"Error al cargar los datos: {e}")
         # Datos de ejemplo como respaldo
         return crear_datos_ejemplo()
+
+def crear_datos_ejemplo():
+    """Función de respaldo con datos de ejemplo"""
+    data = {
+        'NO.': [1, 2, 3],
+        'PROYECTO': ['Proyecto A', 'Proyecto B', 'Proyecto C'],
+        'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': [45, 70, 30],
+        'DEPARTAMENTO': ['Guatemala', 'Sacatepéquez', 'Escuintla'],
+        'MUNICIPIO': ['Guatemala', 'Antigua', 'Escuintla'],
+        # ... agregar más columnas según necesites
+    }
+    return pd.DataFrame(data)
 
 # Cargar datos
 df = cargar_datos()
