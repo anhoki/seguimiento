@@ -19,45 +19,18 @@ st.markdown("---")
 # Función para cargar datos (ajusta según tu fuente de datos)
 @st.cache_data
 def cargar_datos():
-    # Aquí puedes cargar tus datos desde Excel, CSV, etc.
-    # Ejemplo con datos de muestra
-    data = {
-        'NO.': [1, 2, 3],
-        'PERSONAL UCEE': ['Juan Pérez', 'María García', 'Carlos López'],
-        'CARPETA DE ASIGNACION': ['C001', 'C002', 'C003'],
-        'TIPO': ['Nuevo', 'Reforma', 'Mantenimiento'],
-        'INTERVENCIÓN': ['Completa', 'Parcial', 'Completa'],
-        'PLANIFICACIÓN INTERNA/EXTERNA': ['Externa', 'Interna', 'Externa'],
-        'PLANIFICADOR EXTERNO': ['Empresa A', 'N/A', 'Empresa B'],
-        'PROYECTO': ['Proyecto 1', 'Proyecto 2', 'Proyecto 3'],
-        'FECHA DE ASIGNACION/CONTRATO': pd.to_datetime(['2024-01-15', '2024-01-20', '2024-02-01']),
-        'FECHA ESTIMADA DE ENTREGA DEL PROYECTO': pd.to_datetime(['2024-03-15', '2024-03-30', '2024-04-15']),
-        'FECHA DE ENTREGA SEGUN CONTRATO': pd.to_datetime(['2024-03-20', '2024-04-01', '2024-04-20']),
-        'Metros cuadrados de la edificacion': [150, 200, 180],
-        'Monto del Contrato de Planificación Externa': [150000, 200000, 180000],
-        'Monto pagado a la fecha': [75000, 100000, 90000],
-        'Plan de trabajo de la sección de diseño': ['En progreso', 'Completado', 'En progreso'],
-        'FASE Y PRODUCTO ENTREGADA POR LOS CONSULTORES EXTERNOS': ['Fase 1', 'Fase 2', 'Fase 1'],
-        'AVANCE EN PLANIFICACION': [60, 80, 45],
-        'REVISIÓN DE ESPECIALISTA ESTRUCTURAL': [75, 90, 60],
-        'REVISIÓN DE ESPECIALISTA AMBIENTAL': [70, 85, 55],
-        'REVISIÓN DE ESPECIALISTA EN TIERRAS': [65, 80, 50],
-        'REVISIÓN DE ESPECIALISTA ELECTRICISTA': [60, 75, 45],
-        'REVISIÓN DE ESPECIALISTA GEOLOGO': [55, 70, 40],
-        'AVANCE EN RENGLONEO Y CUANTIFICACION': [50, 65, 35],
-        'AVANCE EN PERFIL DEL PROYECTO': [80, 90, 70],
-        'AVANCE AVAL CONRED': [40, 60, 30],
-        'AVANCE EXPEDIENTE SANITARIO MSPAS': [35, 55, 25],
-        'AVANCE EN DOCUMENTOS SUBIDOS AL SNIP': [45, 70, 40],
-        'PROCESO DE TRASLADO A SECCIÓN DE COMPRAS': ['Pendiente', 'En proceso', 'Pendiente'],
-        'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': [55, 75, 45],
-        'CÓDIGO UDI': ['UDI001', 'UDI002', 'UDI003'],
-        'SNIP': ['SNIP001', 'SNIP002', 'SNIP003'],
-        'MUNICIPIO': ['Guatemala', 'Mixco', 'Villa Nueva'],
-        'DEPARTAMENTO': ['Guatemala', 'Guatemala', 'Guatemala'],
-        'SEGUIMIENTO EXTERNO': ['Programado', 'En curso', 'Pendiente']
-    }
-    return pd.DataFrame(data)
+    try:
+        # Intenta leer el archivo Excel
+        df = pd.read_excel('datos/tu_archivo.xlsx')  # Cambia el nombre
+        
+        # Si tu Excel tiene varias hojas, especifica la hoja
+        # df = pd.read_excel('datos/tu_archivo.xlsx', sheet_name='Hoja1')
+        
+        return df
+    except FileNotFoundError:
+        st.error("No se encontró el archivo de datos. Por favor, verifica que esté en la carpeta 'datos/'")
+        # Datos de ejemplo como respaldo
+        return crear_datos_ejemplo()
 
 # Cargar datos
 df = cargar_datos()
