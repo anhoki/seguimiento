@@ -24,7 +24,7 @@ st.markdown("---")
 @st.cache_data
 def load_data():
     """Carga los datos desde el archivo Excel"""
-    df = pd.read_excel('BD encabezados.xlsx', engine='openpyxl')
+    df = pd.read_excel('followingmatrix.xlsx', engine='openpyxl')
     
     # Limpiar nombres de columnas
     df.columns = df.columns.str.strip()
@@ -40,7 +40,8 @@ def load_data():
         'DEPARTAMENTO': 'DEPARTAMENTO',
         '% AVANCE FISICO REAL': 'AVANCE_FISICO',
         '% AVANCE FINANCIERO': 'AVANCE_FINANCIERO',
-        'ESTATUS DEL PROYECTO': 'OBSERVACIONES',
+        'ESTATUS DEL PROYECTO': 'ESTATUS',
+        'OBSERVACIONES': 'OBSERVACIONES',  # Nueva columna
         'SUPERVISOR INTERNO UCEE ACTUAL': 'SUPERVISOR',
         'SNIP': 'SNIP',
         'NOG': 'NOG',
@@ -92,12 +93,15 @@ try:
     df = load_data()
     if df is not None and not df.empty:
         st.success(f"✅ Datos cargados correctamente: {len(df)} proyectos")
+        # Mostrar columnas cargadas (para depuración)
+        with st.expander("📋 Columnas cargadas"):
+            st.write(df.columns.tolist())
     else:
         st.error("❌ No se encontraron datos en el archivo")
         st.stop()
 except Exception as e:
     st.error(f"❌ Error al cargar datos: {e}")
-    st.info("📝 Asegúrate de que el archivo 'BD encabezados.xlsx' existe en el mismo directorio")
+    st.info("📝 Asegúrate de que el archivo 'followingmatrix.xlsx' existe en el mismo directorio")
     st.stop()
 
 # ============================================
@@ -105,7 +109,7 @@ except Exception as e:
 # ============================================
 st.sidebar.header("🔍 Filtros")
 
-# FILTRO 1: AÑO (Principal)
+# FILTRO 1: AÑO
 st.sidebar.subheader("📅 1. Seleccionar Año")
 años_disponibles = sorted(df['ANIO_INICIO'].unique())
 años_seleccionados = st.sidebar.multiselect(
@@ -159,14 +163,14 @@ df_filtrado = df_filtrado[df_filtrado['DEPARTAMENTO'].isin(departamentos_selecci
 
 # FILTRO 5: Estatus
 st.sidebar.subheader("📌 5. Estatus")
-estatus_disponibles = sorted(df_filtrado['ESTATUS DEL PROYECTO'].unique())
+estatus_disponibles = sorted(df_filtrado['ESTATUS'].unique())
 estatus_seleccionados = st.sidebar.multiselect(
     "Estatus",
     options=estatus_disponibles,
     default=estatus_disponibles
 )
 
-df_filtrado = df_filtrado[df_filtrado['ESTATUS DEL PROYECTO'].isin(estatus_seleccionados)]
+df_filtrado = df_filtrado[df_filtrado['ESTATUS'].isin(estatus_seleccionados)]
 
 # FILTRO 6: Rango de Avance
 st.sidebar.subheader("📈 6. Rango de Avance Físico")
@@ -270,9 +274,9 @@ fig_scatter = px.scatter(
     df_filtrado,
     x='AVANCE_FISICO',
     y='AVANCE_FINANCIERO',
-    color='ESTATUS DEL PROYECTO',
+    color='ESTATUS',
     size='MONTO_MODIFICADO',
-    hover_data=['NOMBRE_PROYECTO', 'INSTITUCION', 'EMPRESA'],
+    hover_data=['NOMBRE_PROYECTO', 'INSTITUCION', 'EMPRESA', 'OBSERVACIONES'],
     title="Relación entre Avances"
 )
 fig_scatter.add_trace(
@@ -316,7 +320,8 @@ try:
                 <b>Ubicación:</b> {row['MUNICIPIO']}, {row['DEPARTAMENTO']}<br>
                 <b>Avance:</b> {row['AVANCE_FISICO']:.1f}%<br>
                 <b>Monto:</b> Q{row['MONTO_MODIFICADO']:,.2f}<br>
-                <b>Empresa:</b> {row['EMPRESA']}
+                <b>Empresa:</b> {row['EMPRESA']}<br>
+                <b>Observaciones:</b> {str(row['OBSERVACIONES'])[:100]}...
                 """
                 folium.Marker(
                     location=[row['LATITUD'], row['LONGITUD']],
@@ -345,7 +350,7 @@ st.subheader("📋 Detalle de Proyectos")
 columnas_mostrar = [
     'ID', 'NOMBRE_PROYECTO', 'ANIO_INICIO', 'INSTITUCION', 'TIPO_PROYECTO',
     'DEPARTAMENTO', 'MUNICIPIO', 'AVANCE_FISICO', 'AVANCE_FINANCIERO',
-    'ESTATUS DEL PROYECTO', 'MONTO_MODIFICADO', 'EMPRESA'
+    'ESTATUS', 'OBSERVACIONES', 'MONTO_MODIFICADO', 'EMPRESA', 'SUPERVISOR'
 ]
 
 columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
@@ -372,7 +377,8 @@ st.subheader("⚠️ Alertas")
 proyectos_criticos = df_filtrado[df_filtrado['AVANCE_FISICO'] < 30]
 if len(proyectos_criticos) > 0:
     st.warning(f"🚨 {len(proyectos_criticos)} proyectos con avance menor al 30%")
-    st.dataframe(proyectos_criticos[['NOMBRE_PROYECTO', 'INSTITUCION', 'AVANCE_FISICO', 'EMPRESA']])
+    with st.expander("Ver detalles"):
+        st.dataframe(proyectos_criticos[['NOMBRE_PROYECTO', 'INSTITUCION', 'AVANCE_FISICO', 'OBSERVACIONES']])
 
 proyectos_atraso = df_filtrado[df_filtrado['SALDO_PENDIENTE'] > df_filtrado['MONTO_MODIFICADO'] * 0.3]
 if len(proyectos_atraso) > 0:
@@ -396,15 +402,22 @@ if st.sidebar.button("Exportar a CSV"):
 # ============================================
 # INFORMACIÓN
 # ============================================
-with st.expander("ℹ️ Información"):
+with st.expander("ℹ️ Información del Dashboard"):
     st.markdown(f"""
-    **Resumen:**
+    **Resumen General:**
     - Total proyectos: {len(df_filtrado)}
     - Monto total: Q{df_filtrado['MONTO_MODIFICADO'].sum():,.2f}
-    - Avance promedio: {df_filtrado['AVANCE_FISICO'].mean():.1f}%
-    - Empresas: {df_filtrado['EMPRESA'].nunique()}
+    - Avance físico promedio: {df_filtrado['AVANCE_FISICO'].mean():.1f}%
+    - Avance financiero promedio: {df_filtrado['AVANCE_FINANCIERO'].mean():.1f}%
+    - Empresas contratistas: {df_filtrado['EMPRESA'].nunique()}
     - Instituciones: {df_filtrado['INSTITUCION'].nunique()}
+    - Departamentos: {df_filtrado['DEPARTAMENTO'].nunique()}
+    
+    **Columnas disponibles en el dashboard:**
+    - ID, Año, Institución, Tipo de Proyecto, Nombre
+    - Municipio, Departamento, Avance Físico, Avance Financiero
+    - Estatus, **Observaciones**, Montos, Empresa, Supervisor
     """)
 
 st.markdown("---")
-st.markdown(f"📅 Actualizado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.markdown(f"📅 Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
