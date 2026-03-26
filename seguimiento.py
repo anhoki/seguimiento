@@ -1,559 +1,410 @@
+# dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import folium
-from streamlit_folium import folium_static
-import geopandas as gpd
-from shapely.geometry import Point
+import json
 
+# Configuración de la página
+st.set_page_config(
+    page_title="Dashboard de Proyectos - Guatemala",
+    page_icon="📊",
+    layout="wide"
+)
+
+# Título principal
+st.title("📊 Dashboard de Seguimiento de Proyectos")
+st.markdown("---")
+
+# ============================================
+# CARGA DE DATOS
+# ============================================
 @st.cache_data
-def cargar_datos():
-    try:
-        # Leer tu archivo Excel
-        df = pd.read_excel('BD encabezados.xlsx')  # Ajusta la ruta
-        
-        # Lista de columnas que deben ser numéricas
-        columnas_numericas = [
-            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)',
-            'AVANCE EN PLANIFICACION',
-            'REVISIÓN DE ESPECIALISTA ESTRUCTURAL',
-            'REVISIÓN DE ESPECIALISTA AMBIENTAL',
-            'REVISIÓN DE ESPECIALISTA EN TIERRAS',
-            'REVISIÓN DE ESPECIALISTA ELECTRICISTA',
-            'REVISIÓN DE ESPECIALISTA GEOLOGO',
-            'AVANCE EN RENGLONEO Y CUANTIFICACION',
-            'AVANCE EN PERFIL DEL PROYECTO',
-            'AVANCE AVAL CONRED',
-            'AVANCE EXPEDIENTE SANITARIO MSPAS',
-            'AVANCE EN DOCUMENTOS SUBIDOS AL SNIP',
-            'Metros cuadrados de la edificacion',
-            'Monto del Contrato de Planificación Externa',
-            'Monto pagado a la fecha'
-        ]
-        
-        # Convertir cada columna a numérico, forzando errores a NaN
-        for col in columnas_numericas:
-            if col in df.columns:
-                # Eliminar caracteres especiales como '%', 'Q', etc.
-                df[col] = df[col].astype(str).str.replace('%', '', regex=False)
-                df[col] = df[col].astype(str).str.replace('Q', '', regex=False)
-                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
-                df[col] = df[col].astype(str).str.strip()
-                
-                # Convertir a numérico
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # Convertir columnas de fecha
-        columnas_fecha = [
-            'FECHA DE ASIGNACION/CONTRATO',
-            'FECHA ESTIMADA DE ENTREGA DEL PROYECTO',
-            'FECHA DE ENTREGA SEGUN CONTRATO'
-        ]
-        
-        for col in columnas_fecha:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-        
-        # Eliminar filas con valores nulos en columnas críticas
-        df = df.dropna(subset=['PROYECTO', 'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'])
-        
-        # Llenar valores nulos con 0 en columnas numéricas
-        for col in columnas_numericas:
-            if col in df.columns:
-                df[col] = df[col].fillna(0)
-        
-        st.sidebar.success(f"✅ Datos cargados: {len(df)} registros")
-        return df
-        
-    except Exception as e:
-        st.error(f"Error al cargar los datos: {e}")
-        # Datos de ejemplo como respaldo
-        return crear_datos_ejemplo()
-
-def crear_datos_ejemplo():
-    """Función de respaldo con datos de ejemplo"""
-    data = {
-        'NO.': [1, 2, 3],
-        'PROYECTO': ['Proyecto A', 'Proyecto B', 'Proyecto C'],
-        'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': [45, 70, 30],
-        'DEPARTAMENTO': ['Guatemala', 'Sacatepéquez', 'Escuintla'],
-        'MUNICIPIO': ['Guatemala', 'Antigua', 'Escuintla'],
-        # ... agregar más columnas según necesites
+def load_data():
+    """Carga los datos desde el archivo Excel"""
+    df = pd.read_excel('followingmatrix.xlsx', engine='openpyxl')
+    
+    # Limpiar nombres de columnas
+    df.columns = df.columns.str.strip()
+    
+    # Renombrar columnas para facilitar el manejo
+    columnas_rename = {
+        'No.': 'ID',
+        'AÑO DE INICIO': 'ANIO_INICIO',
+        'INSTITUCIÓN': 'INSTITUCION',
+        'TIPO DE PROYECTO': 'TIPO_PROYECTO',
+        'NOMBRE  DEL  PROYECTO': 'NOMBRE_PROYECTO',
+        'MUNICIPIO': 'MUNICIPIO',
+        'DEPARTAMENTO': 'DEPARTAMENTO',
+        '% AVANCE FISICO REAL': 'AVANCE_FISICO',
+        '% AVANCE FINANCIERO': 'AVANCE_FINANCIERO',
+        'ESTATUS DEL PROYECTO': 'ESTATUS',
+        'SUPERVISOR INTERNO UCEE ACTUAL': 'SUPERVISOR',
+        'SNIP': 'SNIP',
+        'NOG': 'NOG',
+        'CONTRATO': 'CONTRATO',
+        'LATITUD': 'LATITUD',
+        'LONGITUD': 'LONGITUD',
+        'FECHA DE INICIO': 'FECHA_INICIO',
+        'FECHA FINALIZACION': 'FECHA_FIN',
+        'PLAZO CONTRACTUAL': 'PLAZO_CONTRACTUAL',
+        'PRORROGA': 'PRORROGA',
+        'EMPRESA': 'EMPRESA',
+        'NIT': 'NIT',
+        'MONTO DE CONTRATO ORIGINAL': 'MONTO_ORIGINAL',
+        'DOCUMENTOS DE CAMBIO': 'DOCUMENTOS_CAMBIO',
+        'MONTO DE CONTRATO MODIFICADO': 'MONTO_MODIFICADO',
+        'MONTO PAGADO': 'MONTO_PAGADO',
+        'SALDO PENDIENTE POR PAGAR': 'SALDO_PENDIENTE'
     }
-    return pd.DataFrame(data)
+    
+    # Renombrar solo columnas que existen
+    columnas_existentes = {k: v for k, v in columnas_rename.items() if k in df.columns}
+    df.rename(columns=columnas_existentes, inplace=True)
+    
+    # Convertir columnas numéricas
+    columnas_numericas = ['AVANCE_FISICO', 'AVANCE_FINANCIERO', 'MONTO_ORIGINAL', 
+                          'MONTO_MODIFICADO', 'MONTO_PAGADO', 'SALDO_PENDIENTE', 
+                          'PLAZO_CONTRACTUAL', 'LATITUD', 'LONGITUD']
+    
+    for col in columnas_numericas:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Limpiar porcentajes (remover el signo % si existe)
+    if 'AVANCE_FISICO' in df.columns:
+        df['AVANCE_FISICO'] = df['AVANCE_FISICO'].astype(str).str.replace('%', '').astype(float)
+    if 'AVANCE_FINANCIERO' in df.columns:
+        df['AVANCE_FINANCIERO'] = df['AVANCE_FINANCIERO'].astype(str).str.replace('%', '').astype(float)
+    
+    # Convertir fechas
+    columnas_fechas = ['FECHA_INICIO', 'FECHA_FIN']
+    for col in columnas_fechas:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+    
+    return df
 
 # Cargar datos
-df = cargar_datos()
+try:
+    df = load_data()
+    if df is not None and not df.empty:
+        st.success(f"✅ Datos cargados correctamente: {len(df)} proyectos")
+    else:
+        st.error("❌ No se encontraron datos en el archivo")
+        st.stop()
+except Exception as e:
+    st.error(f"❌ Error al cargar datos: {e}")
+    st.info("📝 Asegúrate de que el archivo 'followingmatrix.xlsx' existe en el mismo directorio")
+    st.stop()
 
-# Sidebar - Filtros
+# ============================================
+# FILTROS JERÁRQUICOS
+# ============================================
 st.sidebar.header("🔍 Filtros")
 
-# Filtros múltiples
-departamentos = st.sidebar.multiselect(
-    "Seleccionar Departamento",
-    options=df['DEPARTAMENTO'].unique(),
-    default=df['DEPARTAMENTO'].unique()
+# FILTRO 1: AÑO (Principal)
+st.sidebar.subheader("📅 1. Seleccionar Año")
+años_disponibles = sorted(df['ANIO_INICIO'].unique())
+años_seleccionados = st.sidebar.multiselect(
+    "Año de inicio",
+    options=años_disponibles,
+    default=años_disponibles
 )
 
-municipios = st.sidebar.multiselect(
-    "Seleccionar Municipio",
-    options=df['MUNICIPIO'].unique(),
-    default=df['MUNICIPIO'].unique()
+df_filtrado = df[df['ANIO_INICIO'].isin(años_seleccionados)]
+
+if df_filtrado.empty:
+    st.warning("⚠️ No hay proyectos en los años seleccionados.")
+    st.stop()
+
+# FILTRO 2: INSTITUCIÓN
+st.sidebar.subheader("🏛️ 2. Seleccionar Institución")
+instituciones_disponibles = sorted(df_filtrado['INSTITUCION'].unique())
+instituciones_seleccionadas = st.sidebar.multiselect(
+    "Institución",
+    options=instituciones_disponibles,
+    default=instituciones_disponibles
 )
 
-tipo_proyecto = st.sidebar.multiselect(
+df_filtrado = df_filtrado[df_filtrado['INSTITUCION'].isin(instituciones_seleccionadas)]
+
+if df_filtrado.empty:
+    st.warning("⚠️ No hay proyectos para las instituciones seleccionadas.")
+    st.stop()
+
+# FILTRO 3: Tipo de Proyecto
+st.sidebar.subheader("📁 3. Tipo de Proyecto")
+tipos_disponibles = sorted(df_filtrado['TIPO_PROYECTO'].unique())
+tipos_seleccionados = st.sidebar.multiselect(
     "Tipo de Proyecto",
-    options=df['TIPO'].unique(),
-    default=df['TIPO'].unique()
+    options=tipos_disponibles,
+    default=tipos_disponibles
 )
 
-personal_ucee = st.sidebar.multiselect(
-    "Personal UCEE",
-    options=df['PERSONAL UCEE'].unique(),
-    default=df['PERSONAL UCEE'].unique()
+df_filtrado = df_filtrado[df_filtrado['TIPO_PROYECTO'].isin(tipos_seleccionados)]
+
+# FILTRO 4: Departamento
+st.sidebar.subheader("🗺️ 4. Departamento")
+departamentos_disponibles = sorted(df_filtrado['DEPARTAMENTO'].unique())
+departamentos_seleccionados = st.sidebar.multiselect(
+    "Departamento",
+    options=departamentos_disponibles,
+    default=departamentos_disponibles
 )
 
-# Aplicar filtros
-df_filtrado = df[
-    (df['DEPARTAMENTO'].isin(departamentos)) &
-    (df['MUNICIPIO'].isin(municipios)) &
-    (df['TIPO'].isin(tipo_proyecto)) &
-    (df['PERSONAL UCEE'].isin(personal_ucee))
+df_filtrado = df_filtrado[df_filtrado['DEPARTAMENTO'].isin(departamentos_seleccionados)]
+
+# FILTRO 5: Estatus
+st.sidebar.subheader("📌 5. Estatus")
+estatus_disponibles = sorted(df_filtrado['ESTATUS'].unique())
+estatus_seleccionados = st.sidebar.multiselect(
+    "Estatus",
+    options=estatus_disponibles,
+    default=estatus_disponibles
+)
+
+df_filtrado = df_filtrado[df_filtrado['ESTATUS'].isin(estatus_seleccionados)]
+
+# FILTRO 6: Rango de Avance
+st.sidebar.subheader("📈 6. Rango de Avance Físico")
+rango_avance = st.sidebar.slider(
+    "Porcentaje de avance (%)",
+    min_value=0,
+    max_value=100,
+    value=(0, 100)
+)
+
+df_filtrado = df_filtrado[
+    df_filtrado['AVANCE_FISICO'].between(rango_avance[0], rango_avance[1])
 ]
 
-# Métricas principales en la parte superior
-st.subheader("📈 Métricas Generales")
+# Resumen de filtros
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Resumen")
+st.sidebar.info(f"""
+**Años:** {len(años_seleccionados)}  
+**Instituciones:** {len(instituciones_seleccionadas)}  
+**Tipos:** {len(tipos_seleccionados)}  
+**Departamentos:** {len(departamentos_seleccionados)}  
+**Estatus:** {len(estatus_seleccionados)}  
+**Proyectos:** {len(df_filtrado)}
+""")
+
+# ============================================
+# MÉTRICAS PRINCIPALES
+# ============================================
+st.header("📈 Indicadores Clave")
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        "Total Proyectos",
-        len(df_filtrado),
-        delta=f"{len(df_filtrado) - len(df)} vs total"
-    )
+    st.metric("Total Proyectos", len(df_filtrado))
 
 with col2:
-    avance_promedio = df_filtrado['AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'].mean()
-    st.metric(
-        "Avance Promedio",
-        f"{avance_promedio:.1f}%",
-        delta=f"{avance_promedio - df['AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'].mean():.1f}% vs global"
-    )
+    avance_fisico = df_filtrado['AVANCE_FISICO'].mean()
+    st.metric("Avance Físico Promedio", f"{avance_fisico:.1f}%")
 
 with col3:
-    monto_total = df_filtrado['Monto del Contrato de Planificación Externa'].sum()
-    st.metric(
-        "Monto Total Contratos",
-        f"Q{monto_total:,.0f}"
-    )
+    avance_financiero = df_filtrado['AVANCE_FINANCIERO'].mean()
+    st.metric("Avance Financiero Promedio", f"{avance_financiero:.1f}%")
 
 with col4:
-    monto_pagado = df_filtrado['Monto pagado a la fecha'].sum()
-    porcentaje_pagado = (monto_pagado / monto_total * 100) if monto_total > 0 else 0
-    st.metric(
-        "Monto Pagado",
-        f"Q{monto_pagado:,.0f}",
-        delta=f"{porcentaje_pagado:.1f}% del total"
-    )
+    monto_total = df_filtrado['MONTO_MODIFICADO'].sum()
+    st.metric("Monto Total", f"Q{monto_total:,.2f}")
 
 st.markdown("---")
 
-# Pestañas para organizar la información
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📋 Vista General",
-    "📊 Avances por Especialidad",
-    "💰 Gestión Financiera",
-    "📅 Cronograma",
-    "🗺️ Geolocalización"
-])
+# ============================================
+# GRÁFICOS PRINCIPALES
+# ============================================
 
-with tab1:
-    st.subheader("Tabla de Proyectos")
-    
-    # Selector de columnas a mostrar
-    columnas_mostrar = st.multiselect(
-        "Seleccionar columnas a mostrar",
-        options=df_filtrado.columns.tolist(),
-        default=['NO.', 'PROYECTO', 'PERSONAL UCEE', 'TIPO', 'MUNICIPIO', 
-                 'DEPARTAMENTO', 'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)']
-    )
-    
-    if columnas_mostrar:
-        st.dataframe(
-            df_filtrado[columnas_mostrar],
-            use_container_width=True,
-            hide_index=True
-        )
-    
-    # Gráfico de avance por proyecto
-    st.subheader("Avance por Proyecto")
+# Gráfico 1: Evolución por año
+st.subheader("📅 Evolución de Proyectos por Año")
+proyectos_por_año = df_filtrado.groupby('ANIO_INICIO').size().reset_index(name='Cantidad')
+fig_temporal = px.line(
+    proyectos_por_año,
+    x='ANIO_INICIO',
+    y='Cantidad',
+    markers=True,
+    line_shape='linear'
+)
+fig_temporal.update_traces(line=dict(width=3), marker=dict(size=10))
+st.plotly_chart(fig_temporal, use_container_width=True)
+
+# Gráficos en dos columnas
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("📊 Avance por Tipo de Proyecto")
+    avance_por_tipo = df_filtrado.groupby('TIPO_PROYECTO')[['AVANCE_FISICO', 'AVANCE_FINANCIERO']].mean().reset_index()
     fig_avance = px.bar(
-        df_filtrado,
-        x='PROYECTO',
-        y='AVANCE DE DISEÑO Y PLANIFICACIÓN (%)',
-        color='TIPO',
-        title="Porcentaje de Avance por Proyecto",
-        labels={'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': 'Avance (%)'}
+        avance_por_tipo,
+        x='TIPO_PROYECTO',
+        y=['AVANCE_FISICO', 'AVANCE_FINANCIERO'],
+        barmode='group',
+        title="Avance Promedio por Tipo",
+        labels={'value': 'Porcentaje (%)', 'variable': 'Tipo'}
     )
     st.plotly_chart(fig_avance, use_container_width=True)
 
-with tab2:
-    st.subheader("Avances por Especialidad")
-    
-    # Selección de proyecto para ver detalles
-    proyecto_seleccionado = st.selectbox(
-        "Seleccionar Proyecto para ver detalles",
-        options=df_filtrado['PROYECTO'].tolist()
+with col2:
+    st.subheader("💰 Montos por Institución")
+    montos_inst = df_filtrado.groupby('INSTITUCION')['MONTO_MODIFICADO'].sum().reset_index()
+    montos_inst = montos_inst.sort_values('MONTO_MODIFICADO', ascending=True).head(10)
+    fig_montos = px.bar(
+        montos_inst,
+        x='MONTO_MODIFICADO',
+        y='INSTITUCION',
+        orientation='h',
+        title="Top 10 Instituciones",
+        labels={'MONTO_MODIFICADO': 'Monto (Q)'}
     )
-    
-    if proyecto_seleccionado:
-        df_proyecto = df_filtrado[df_filtrado['PROYECTO'] == proyecto_seleccionado].iloc[0]
-        
-        # Gráfico radial de avances por especialidad
-        especialidades = [
-            'REVISIÓN DE ESPECIALISTA ESTRUCTURAL',
-            'REVISIÓN DE ESPECIALISTA AMBIENTAL',
-            'REVISIÓN DE ESPECIALISTA EN TIERRAS',
-            'REVISIÓN DE ESPECIALISTA ELECTRICISTA',
-            'REVISIÓN DE ESPECIALISTA GEOLOGO'
-        ]
-        
-        valores = [df_proyecto[esp] for esp in especialidades]
-        
-        fig = go.Figure(data=go.Scatterpolar(
-            r=valores,
-            theta=especialidades,
-            fill='toself'
-        ))
-        
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 100]
-                )),
-            showlegend=False,
-            title=f"Avances por Especialidad - {proyecto_seleccionado}"
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Tabla de avances específicos
-        st.subheader("Detalle de Avances")
-        avances_detalle = {
-            'Área': ['Planificación', 'Rengloneo', 'Perfil', 'Aval CONRED', 
-                     'Expediente MSPAS', 'Documentos SNIP'],
-            'Avance (%)': [
-                df_proyecto['AVANCE EN PLANIFICACION'],
-                df_proyecto['AVANCE EN RENGLONEO Y CUANTIFICACION'],
-                df_proyecto['AVANCE EN PERFIL DEL PROYECTO'],
-                df_proyecto['AVANCE AVAL CONRED'],
-                df_proyecto['AVANCE EXPEDIENTE SANITARIO MSPAS'],
-                df_proyecto['AVANCE EN DOCUMENTOS SUBIDOS AL SNIP']
-            ]
-        }
-        df_avances = pd.DataFrame(avances_detalle)
-        st.dataframe(df_avances, use_container_width=True, hide_index=True)
+    st.plotly_chart(fig_montos, use_container_width=True)
 
-with tab3:
-    st.subheader("Gestión Financiera")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Gráfico de montos por proyecto
-        fig_montos = px.bar(
-            df_filtrado,
-            x='PROYECTO',
-            y=['Monto del Contrato de Planificación Externa', 'Monto pagado a la fecha'],
-            title="Montos de Contrato vs Pagado por Proyecto",
-            barmode='group'
-        )
-        st.plotly_chart(fig_montos, use_container_width=True)
-    
-    with col2:
-        # Gráfico de torta - distribución por tipo
-        fig_pie = px.pie(
-            df_filtrado,
-            values='Monto del Contrato de Planificación Externa',
-            names='TIPO',
-            title="Distribución de Montos por Tipo de Proyecto"
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    # Tabla financiera
-    st.subheader("Detalle Financiero")
-    columnas_financieras = ['PROYECTO', 'Monto del Contrato de Planificación Externa', 
-                           'Monto pagado a la fecha', 'Metros cuadrados de la edificacion']
-    st.dataframe(
-        df_filtrado[columnas_financieras],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Monto del Contrato de Planificación Externa": st.column_config.NumberColumn(format="Q%d"),
-            "Monto pagado a la fecha": st.column_config.NumberColumn(format="Q%d")
-        }
+# Matriz de avance
+st.subheader("🎯 Matriz de Avance Físico vs Financiero")
+fig_scatter = px.scatter(
+    df_filtrado,
+    x='AVANCE_FISICO',
+    y='AVANCE_FINANCIERO',
+    color='ESTATUS',
+    size='MONTO_MODIFICADO',
+    hover_data=['NOMBRE_PROYECTO', 'INSTITUCION', 'EMPRESA'],
+    title="Relación entre Avances"
+)
+fig_scatter.add_trace(
+    go.Scatter(
+        x=[0, 100],
+        y=[0, 100],
+        mode='lines',
+        name='Línea Ideal',
+        line=dict(dash='dash', color='gray')
     )
+)
+st.plotly_chart(fig_scatter, use_container_width=True)
 
-with tab4:
-    st.subheader("Cronograma de Proyectos")
-    
-    # Preparar datos para el diagrama de Gantt
-    df_gantt = df_filtrado.copy()
-    df_gantt['Inicio'] = df_gantt['FECHA DE ASIGNACION/CONTRATO']
-    df_gantt['Fin'] = df_gantt['FECHA ESTIMADA DE ENTREGA DEL PROYECTO']
-    
-    fig_gantt = px.timeline(
-        df_gantt,
-        x_start="Inicio",
-        x_end="Fin",
-        y="PROYECTO",
-        color="TIPO",
-        title="Cronograma de Proyectos",
-        labels={"PROYECTO": "Proyecto"}
-    )
-    fig_gantt.update_yaxes(autorange="reversed")
-    st.plotly_chart(fig_gantt, use_container_width=True)
-    
-    # Tabla de fechas
-    st.subheader("Fechas Clave")
-    columnas_fechas = ['PROYECTO', 'FECHA DE ASIGNACION/CONTRATO', 
-                       'FECHA ESTIMADA DE ENTREGA DEL PROYECTO', 
-                       'FECHA DE ENTREGA SEGUN CONTRATO']
-    st.dataframe(
-        df_filtrado[columnas_fechas],
-        use_container_width=True,
-        hide_index=True
-    )
+# ============================================
+# MAPAS
+# ============================================
+st.header("🗺️ Visualización Geográfica")
 
-with tab5:
-    st.subheader("🗺️ Distribución Geográfica")
+try:
+    import folium
+    from streamlit_folium import folium_static
+    from folium.plugins import MarkerCluster, HeatMap
     
-    # Filtros en la misma pestaña
-    col1, col2 = st.columns(2)
+    # Proyectos con coordenadas
+    proyectos_con_coords = df_filtrado.dropna(subset=['LATITUD', 'LONGITUD']).copy()
     
-    with col1:
-        # Filtro de departamentos (único o múltiple)
-        departamentos_disponibles = df_filtrado['DEPARTAMENTO'].dropna().unique()
+    if len(proyectos_con_coords) > 0:
+        center_lat = proyectos_con_coords['LATITUD'].mean()
+        center_lon = proyectos_con_coords['LONGITUD'].mean()
         
-        if len(departamentos_disponibles) > 0:
-            # Opción para seleccionar tipo de visualización
-            tipo_seleccion = st.radio(
-                "Seleccionar departamentos:",
-                ["Un departamento", "Múltiples departamentos"],
-                key="tipo_seleccion_mapa"
-            )
+        tab1, tab2 = st.tabs(["📍 Mapa de Proyectos", "🔥 Mapa de Calor"])
+        
+        with tab1:
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=8, control_scale=True)
+            marker_cluster = MarkerCluster().add_to(m)
             
-            if tipo_seleccion == "Un departamento":
-                depto_seleccionado = st.selectbox(
-                    "Seleccionar departamento:",
-                    options=sorted(departamentos_disponibles),
-                    key="depto_unico"
-                )
-                deptos_filtro = [depto_seleccionado]
-            else:
-                deptos_filtro = st.multiselect(
-                    "Seleccionar departamentos:",
-                    options=sorted(departamentos_disponibles),
-                    default=sorted(departamentos_disponibles)[:3] if len(departamentos_disponibles) > 0 else [],
-                    key="depto_multiple"
-                )
-        else:
-            st.warning("No hay datos de departamentos disponibles")
-            deptos_filtro = []
-    
-    with col2:
-        # Filtro de municipios (dependiente del departamento seleccionado)
-        if deptos_filtro:
-            # Filtrar municipios por los departamentos seleccionados
-            municipios_disponibles = df_filtrado[
-                df_filtrado['DEPARTAMENTO'].isin(deptos_filtro)
-            ]['MUNICIPIO'].dropna().unique()
+            for _, row in proyectos_con_coords.iterrows():
+                popup = f"""
+                <b>{row['NOMBRE_PROYECTO']}</b><br>
+                <b>Institución:</b> {row['INSTITUCION']}<br>
+                <b>Ubicación:</b> {row['MUNICIPIO']}, {row['DEPARTAMENTO']}<br>
+                <b>Avance:</b> {row['AVANCE_FISICO']:.1f}%<br>
+                <b>Monto:</b> Q{row['MONTO_MODIFICADO']:,.2f}<br>
+                <b>Empresa:</b> {row['EMPRESA']}
+                """
+                folium.Marker(
+                    location=[row['LATITUD'], row['LONGITUD']],
+                    popup=folium.Popup(popup, max_width=300),
+                    tooltip=row['NOMBRE_PROYECTO']
+                ).add_to(marker_cluster)
             
-            if len(municipios_disponibles) > 0:
-                municipios_seleccionados = st.multiselect(
-                    "Filtrar por municipios (opcional):",
-                    options=sorted(municipios_disponibles),
-                    key="municipios_mapa"
-                )
-            else:
-                municipios_seleccionados = []
-                st.info("No hay municipios disponibles para los departamentos seleccionados")
-        else:
-            municipios_seleccionados = []
-            st.info("Selecciona al menos un departamento")
-    
-    # Aplicar filtros
-    df_mapa = df_filtrado.copy()
-    
-    if deptos_filtro:
-        df_mapa = df_mapa[df_mapa['DEPARTAMENTO'].isin(deptos_filtro)]
-    
-    if municipios_seleccionados:
-        df_mapa = df_mapa[df_mapa['MUNICIPIO'].isin(municipios_seleccionados)]
-    
-    # Verificar si hay datos para mostrar
-    if len(df_mapa) == 0:
-        st.warning("No hay proyectos que coincidan con los filtros seleccionados")
+            folium_static(m, width=1200, height=500)
+            
+        with tab2:
+            heat_data = [[row['LATITUD'], row['LONGITUD']] for _, row in proyectos_con_coords.iterrows()]
+            heat_map = folium.Map(location=[center_lat, center_lon], zoom_start=8)
+            HeatMap(heat_data, radius=15, blur=10).add_to(heat_map)
+            folium_static(heat_map, width=1200, height=500)
     else:
-        # Crear mapa interactivo con Folium
-        st.markdown("### Mapa de Proyectos")
+        st.info("ℹ️ No hay proyectos con coordenadas válidas")
         
-        # Coordenadas aproximadas de Guatemala (centro)
-        lat_centro, lon_centro = 15.7835, -90.2308
-        
-        # Crear mapa base
-        m = folium.Map(
-            location=[lat_centro, lon_centro],
-            zoom_start=7,
-            tiles='OpenStreetMap'
-        )
-        
-        # Diccionario de colores para tipos de proyecto
-        colores_tipo = {
-            'Nuevo': 'green',
-            'Reforma': 'blue',
-            'Mantenimiento': 'orange',
-            'Ampliación': 'purple',
-            'Remodelación': 'red',
-            'Otro': 'gray'
-        }
-        
-        # Agrupar por municipio para mostrar conteo
-        df_agrupado = df_mapa.groupby(['DEPARTAMENTO', 'MUNICIPIO']).agg({
-            'PROYECTO': 'count',
-            'Monto del Contrato de Planificación Externa': 'sum',
-            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': 'mean'
-        }).reset_index()
-        
-        df_agrupado.columns = ['DEPARTAMENTO', 'MUNICIPIO', 'Cantidad Proyectos', 
-                               'Monto Total', 'Avance Promedio']
-        
-        # Aquí necesitarías tener coordenadas reales de los municipios
-        # Por ahora, usaré coordenadas aproximadas
-        # Idealmente, tendrías un archivo con las coordenadas de cada municipio
-        
-        # Si no tienes coordenadas reales, puedes crear puntos aleatorios alrededor del centro
-        import random
-        
-        for idx, row in df_agrupado.iterrows():
-            # Generar coordenadas aleatorias cercanas al centro del departamento
-            # (Esto es solo un ejemplo, idealmente usarías coordenadas reales)
-            lat = lat_centro + random.uniform(-1, 1)
-            lon = lon_centro + random.uniform(-1, 1)
-            
-            # Determinar color basado en el tipo de proyecto principal
-            # (Esto es simplificado, idealmente tendrías el tipo en los datos)
-            color = 'blue'
-            if row['Avance Promedio'] > 75:
-                color = 'green'
-            elif row['Avance Promedio'] > 50:
-                color = 'orange'
-            elif row['Avance Promedio'] > 25:
-                color = 'red'
-            else:
-                color = 'gray'
-            
-            # Crear popup con información
-            popup_text = f"""
-            <b>{row['MUNICIPIO']}, {row['DEPARTAMENTO']}</b><br>
-            Proyectos: {row['Cantidad Proyectos']}<br>
-            Monto Total: Q{row['Monto Total']:,.0f}<br>
-            Avance Promedio: {row['Avance Promedio']:.1f}%
-            """
-            
-            # Añadir marcador
-            folium.Marker(
-                [lat, lon],
-                popup=folium.Popup(popup_text, max_width=300),
-                tooltip=f"{row['MUNICIPIO']} ({row['Cantidad Proyectos']} proyectos)",
-                icon=folium.Icon(color=color, icon='info-sign')
-            ).add_to(m)
-        
-        # Añadir capa de calor si hay suficientes puntos
-        if len(df_agrupado) > 3:
-            from folium.plugins import HeatMap
-            
-            # Preparar datos para heatmap
-            heat_data = []
-            for idx, row in df_agrupado.iterrows():
-                lat = lat_centro + random.uniform(-1, 1)
-                lon = lon_centro + random.uniform(-1, 1)
-                weight = row['Cantidad Proyectos']  # Peso por cantidad de proyectos
-                heat_data.append([lat, lon, weight])
-            
-            # Añadir heatmap
-            HeatMap(heat_data, radius=15, blur=10).add_to(m)
-        
-        # Mostrar el mapa
-        folium_static(m, width=800, height=500)
-        
-        # Estadísticas adicionales
-        st.markdown("### 📊 Resumen por área seleccionada")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total Proyectos", len(df_mapa))
-        
-        with col2:
-            st.metric("Municipios", df_mapa['MUNICIPIO'].nunique())
-        
-        with col3:
-            monto_total = df_mapa['Monto del Contrato de Planificación Externa'].sum()
-            st.metric("Monto Total", f"Q{monto_total:,.0f}")
-        
-        with col4:
-            avance_prom = df_mapa['AVANCE DE DISEÑO Y PLANIFICACIÓN (%)'].mean()
-            st.metric("Avance Promedio", f"{avance_prom:.1f}%")
-        
-        # Tabla de municipios
-        st.markdown("### 📋 Detalle por municipio")
-        
-        # Preparar tabla resumen
-        tabla_municipios = df_mapa.groupby(['DEPARTAMENTO', 'MUNICIPIO']).agg({
-            'PROYECTO': 'count',
-            'Monto del Contrato de Planificación Externa': 'sum',
-            'AVANCE DE DISEÑO Y PLANIFICACIÓN (%)': 'mean'
-        }).round(2).reset_index()
-        
-        tabla_municipios.columns = ['Departamento', 'Municipio', 
-                                    'Cantidad Proyectos', 'Monto Total', 
-                                    'Avance Promedio (%)']
-        
-        # Formatear moneda
-        tabla_municipios['Monto Total'] = tabla_municipios['Monto Total'].apply(
-            lambda x: f"Q{x:,.0f}"
-        )
-        
-        st.dataframe(
-            tabla_municipios,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Avance Promedio (%)": st.column_config.NumberColumn(format="%.1f%%")
-            }
-        )
-        
-        # Gráfico de barras por municipio
-        st.markdown("### 📈 Proyectos por municipio")
-        
-        fig_municipios = px.bar(
-            tabla_municipios,
-            x='Municipio',
-            y='Cantidad Proyectos',
-            color='Departamento',
-            title="Cantidad de proyectos por municipio",
-            labels={'Cantidad Proyectos': 'Número de proyectos'}
-        )
-        fig_municipios.update_xaxis(tickangle=45)
-        st.plotly_chart(fig_municipios, use_container_width=True)
-# Footer con información adicional
+except ImportError:
+    st.warning("⚠️ Librerías de mapas no instaladas")
+
+# ============================================
+# TABLA DE DATOS
+# ============================================
+st.subheader("📋 Detalle de Proyectos")
+
+columnas_mostrar = [
+    'ID', 'NOMBRE_PROYECTO', 'ANIO_INICIO', 'INSTITUCION', 'TIPO_PROYECTO',
+    'DEPARTAMENTO', 'MUNICIPIO', 'AVANCE_FISICO', 'AVANCE_FINANCIERO',
+    'ESTATUS', 'MONTO_MODIFICADO', 'EMPRESA'
+]
+
+columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
+
+busqueda = st.text_input("🔍 Buscar proyecto:", "")
+if busqueda:
+    df_filtrado = df_filtrado[df_filtrado['NOMBRE_PROYECTO'].str.contains(busqueda, case=False, na=False)]
+
+st.dataframe(
+    df_filtrado[columnas_existentes].style.format({
+        'AVANCE_FISICO': '{:.1f}%',
+        'AVANCE_FINANCIERO': '{:.1f}%',
+        'MONTO_MODIFICADO': 'Q{:,.2f}'
+    }),
+    use_container_width=True,
+    height=400
+)
+
+# ============================================
+# ALERTAS
+# ============================================
+st.subheader("⚠️ Alertas")
+
+proyectos_criticos = df_filtrado[df_filtrado['AVANCE_FISICO'] < 30]
+if len(proyectos_criticos) > 0:
+    st.warning(f"🚨 {len(proyectos_criticos)} proyectos con avance menor al 30%")
+    st.dataframe(proyectos_criticos[['NOMBRE_PROYECTO', 'INSTITUCION', 'AVANCE_FISICO', 'EMPRESA']])
+
+proyectos_atraso = df_filtrado[df_filtrado['SALDO_PENDIENTE'] > df_filtrado['MONTO_MODIFICADO'] * 0.3]
+if len(proyectos_atraso) > 0:
+    st.info(f"📉 {len(proyectos_atraso)} proyectos con saldo pendiente mayor al 30%")
+
+# ============================================
+# EXPORTAR
+# ============================================
+st.sidebar.markdown("---")
+st.sidebar.subheader("📥 Exportar")
+
+if st.sidebar.button("Exportar a CSV"):
+    csv = df_filtrado.to_csv(index=False)
+    st.sidebar.download_button(
+        label="Descargar",
+        data=csv,
+        file_name=f"proyectos_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv"
+    )
+
+# ============================================
+# INFORMACIÓN
+# ============================================
+with st.expander("ℹ️ Información"):
+    st.markdown(f"""
+    **Resumen:**
+    - Total proyectos: {len(df_filtrado)}
+    - Monto total: Q{df_filtrado['MONTO_MODIFICADO'].sum():,.2f}
+    - Avance promedio: {df_filtrado['AVANCE_FISICO'].mean():.1f}%
+    - Empresas: {df_filtrado['EMPRESA'].nunique()}
+    - Instituciones: {df_filtrado['INSTITUCION'].nunique()}
+    """)
+
 st.markdown("---")
-st.markdown("📅 Última actualización: " + datetime.now().strftime("%d/%m/%Y %H:%M"))
+st.markdown(f"📅 Actualizado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
