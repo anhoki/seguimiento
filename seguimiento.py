@@ -24,7 +24,7 @@ st.markdown("---")
 @st.cache_data
 def load_data():
     """Carga los datos desde el archivo Excel"""
-    df = pd.read_excel('followingmatrix.xlsx', engine='openpyxl')
+    df = pd.read_excel('BD encabezados.xlsx', engine='openpyxl')
     
     # Limpiar nombres de columnas
     df.columns = df.columns.str.strip()
@@ -101,7 +101,7 @@ try:
         st.stop()
 except Exception as e:
     st.error(f"❌ Error al cargar datos: {e}")
-    st.info("📝 Asegúrate de que el archivo 'followingmatrix.xlsx' existe en el mismo directorio")
+    st.info("📝 Asegúrate de que el archivo 'BD encabezados.xlsx' existe en el mismo directorio")
     st.stop()
 
 # ============================================
