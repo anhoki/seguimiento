@@ -97,7 +97,7 @@ try:
         st.stop()
 except Exception as e:
     st.error(f"❌ Error al cargar datos: {e}")
-    st.info("📝 Asegúrate de que el archivo 'followingmatrix.xlsx' existe en el mismo directorio")
+    st.info("📝 Asegúrate de que el archivo 'BD encabezados.xlsx' existe en el mismo directorio")
     st.stop()
 
 # ============================================
@@ -159,14 +159,14 @@ df_filtrado = df_filtrado[df_filtrado['DEPARTAMENTO'].isin(departamentos_selecci
 
 # FILTRO 5: Estatus
 st.sidebar.subheader("📌 5. Estatus")
-estatus_disponibles = sorted(df_filtrado['ESTATUS'].unique())
+estatus_disponibles = sorted(df_filtrado['ESTATUS DEL PROYECTO'].unique())
 estatus_seleccionados = st.sidebar.multiselect(
     "Estatus",
     options=estatus_disponibles,
     default=estatus_disponibles
 )
 
-df_filtrado = df_filtrado[df_filtrado['ESTATUS'].isin(estatus_seleccionados)]
+df_filtrado = df_filtrado[df_filtrado['ESTATUS DEL PROYECTO'].isin(estatus_seleccionados)]
 
 # FILTRO 6: Rango de Avance
 st.sidebar.subheader("📈 6. Rango de Avance Físico")
@@ -270,7 +270,7 @@ fig_scatter = px.scatter(
     df_filtrado,
     x='AVANCE_FISICO',
     y='AVANCE_FINANCIERO',
-    color='ESTATUS',
+    color='ESTATUS DEL PROYECTO',
     size='MONTO_MODIFICADO',
     hover_data=['NOMBRE_PROYECTO', 'INSTITUCION', 'EMPRESA'],
     title="Relación entre Avances"
@@ -345,7 +345,7 @@ st.subheader("📋 Detalle de Proyectos")
 columnas_mostrar = [
     'ID', 'NOMBRE_PROYECTO', 'ANIO_INICIO', 'INSTITUCION', 'TIPO_PROYECTO',
     'DEPARTAMENTO', 'MUNICIPIO', 'AVANCE_FISICO', 'AVANCE_FINANCIERO',
-    'ESTATUS', 'MONTO_MODIFICADO', 'EMPRESA'
+    'ESTATUS DEL PROYECTO', 'MONTO_MODIFICADO', 'EMPRESA'
 ]
 
 columnas_existentes = [col for col in columnas_mostrar if col in df_filtrado.columns]
